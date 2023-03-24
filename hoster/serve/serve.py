@@ -131,7 +131,10 @@ def download_shellcode():
         return f'File not found: {filename}', 404
 
 if __name__ == '__main__':
-    os.system('clear')
+    if os.name == 'nt':
+        cls
+    else:
+        os.system('clear')
     print("""
 ███████       ███████ ████████  █████   ██████   ██████  ███████ ██████  
    ███        ██         ██    ██   ██ ██       ██       ██      ██   ██ 
